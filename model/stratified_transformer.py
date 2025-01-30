@@ -6,6 +6,8 @@ from timm.models.layers import DropPath, trunc_normal_
 from torch_points3d.core.common_modules import FastBatchNorm1d
 from torch_geometric.nn import voxel_grid
 from lib.pointops2.functions import pointops
+import time
+import numpy as np
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
@@ -46,8 +48,15 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     # batch: long [N]
     # size: float [3, ]
     # start: float [3, ] / None
-
+    call_time = str(time.time())
+    base_address = "/home/ubuntu/Research/Stratified-Transformer/npy_files/"
     cluster = voxel_grid(pos, batch, size, start=start) #[N, ]
+    np.save(base_address+call_time+"_cluster_first.npy", cluster.cpu().numpy())
+    print("------------------------------------------------------")
+    print(base_address+call_time+"_cluster_first.npy")
+    print("------------------------------------------------------")
+    
+
 
     if return_p2v == False:
         unique, cluster = torch.unique(cluster, sorted=True, return_inverse=True)
@@ -61,6 +70,11 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     p2v_map = cluster.new_zeros(n, k) #[n, k]
     mask = torch.arange(k).cuda().unsqueeze(0) < counts.unsqueeze(-1) #[n, k]
     p2v_map[mask] = torch.argsort(cluster)
+    np.save(base_address + call_time+"_p2v_map.npy", p2v_map.cpu().numpy())
+    np.save(base_address + call_time+"cluster_second.npy", cluster.cpu().numpy())
+    np.save(base_address + call_time+"unique.npy", unique.cpu().numpy())
+    np.save(base_address + call_time+"mask.npy", mask.cpu().numpy())
+
 
     return cluster, p2v_map, counts
 
@@ -269,6 +283,7 @@ class BasicLayer(nn.Module):
         # xyz: N, 3
         
         window_size = torch.tensor([self.window_size]*3).type_as(xyz).to(xyz.device)
+        print("/////window size calculated: ", window_size, " from ", self.window_size)
         
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
@@ -289,6 +304,7 @@ class BasicLayer(nn.Module):
         downsample_idx = pointops.furthestsampling(xyz, offset.int(), new_offset.int()) #[N/16,]
 
         new_window_size = 2 * torch.tensor([self.window_size]*3).type_as(xyz).to(xyz.device)
+        print("/////new_window size calculated: ", new_window_size, " from ", self.window_size)
         
         # offset_ = new_offset.clone()
         # offset_[1:] = offset_[1:] - offset_[:-1]

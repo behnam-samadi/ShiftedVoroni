@@ -1,8 +1,11 @@
 import numpy as np
 from collections import Sequence
 import torch
+print("in ghesmat2")
 from torch_geometric.nn import voxel_grid
+print("in ghesmat3")
 
+#https://stackoverflow.com/questions/74180286/segmentation-fault-when-importing-torch-sparse-installing-pytorch-geometric
 def grid_sample(pos, batch_index, size, start=None, return_p2v=True):
     # pos: float [N, 3]
     # batch_szie: long int

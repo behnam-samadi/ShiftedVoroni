@@ -85,6 +85,20 @@ dataset/scannet_v2/train*
 dataset/scannet_v2/test*
 dataset/scannet_v2/val*
 
+
+dependency/
+env3/
+install_requirements.sh
+pre_trained_model/
+requirements2.txt
+requirements3.txt
+requirements4.txt
+requirements_torch.txt
+requirements_without_version.txt
+
+
+
+
 runs/*/events*
 runs/
 torch_points3d/

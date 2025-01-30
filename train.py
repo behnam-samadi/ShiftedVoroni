@@ -17,10 +17,16 @@ import torch.distributed as dist
 import torch.optim.lr_scheduler as lr_scheduler
 from tensorboardX import SummaryWriter
 
+
 from util import dataset, config
+
 from util.s3dis import S3DIS
+print("ta inja")
+
 from util.scannet_v2 import Scannetv2
+
 from util.common_util import AverageMeter, intersectionAndUnionGPU, find_free_port, poly_learning_rate, smooth_loss
+
 from util.data_util import collate_fn, collate_fn_limit
 from util import transform
 from util.logger import get_logger
@@ -210,7 +216,9 @@ def main_worker(gpu, ngpus_per_node, argss):
                 transform.RandomJitter(sigma=jitter_sigma, clip=jitter_clip),
                 transform.RandomDropColor(color_augment=args.get('color_augment', 0.0))
             ])
+        
         train_data = S3DIS(split='train', data_root=args.data_root, test_area=args.test_area, voxel_size=args.voxel_size, voxel_max=args.voxel_max, transform=train_transform, shuffle_index=True, loop=args.loop)
+        print("data read ", args.data_root)
     elif args.data_name == 'scannetv2':
         train_transform = None
         if args.aug:
@@ -236,6 +244,9 @@ def main_worker(gpu, ngpus_per_node, argss):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_data)
     else:
         train_sampler = None
+    print("--------------------")
+    print(train_data)
+    print("--------------------")
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=(train_sampler is None), num_workers=args.workers, \
         pin_memory=True, sampler=train_sampler, drop_last=True, collate_fn=partial(collate_fn_limit, max_batch_points=args.max_batch_points, logger=logger if main_process() else None))
 
