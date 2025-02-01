@@ -14,7 +14,9 @@ def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, b
     # counts: [n, ]
     
     n, k = p2v_map.shape
-    mask = torch.arange(k).unsqueeze(0).cuda() < counts.unsqueeze(-1) #[n, k]
+    #mask = torch.arange(k).unsqueeze(0).cuda() < counts.unsqueeze(-1) #[n, k]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    mask = torch.arange(k, device=device).unsqueeze(0) < counts.unsqueeze(-1)
     mask_mat = (mask.unsqueeze(-1) & mask.unsqueeze(-2)) #[n, k, k]
     index_0 = p2v_map.unsqueeze(-1).expand(-1, -1, k)[mask_mat] #[M, ]
     index_1 = p2v_map.unsqueeze(1).expand(-1, k, -1)[mask_mat] #[M, ]
@@ -24,7 +26,10 @@ def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, b
     
     downsample_mask = downsample_mask[new_p2v_map] #[n, k]
     n, k = new_p2v_map.shape
-    mask = torch.arange(k).unsqueeze(0).cuda() < new_counts.unsqueeze(-1) #[n, k]
+    #mask = torch.arange(k).unsqueeze(0).cuda() < new_counts.unsqueeze(-1) #[n, k]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    mask = torch.arange(k, device=device).unsqueeze(0) < new_counts.unsqueeze(-1)  # [n, k]
+
     downsample_mask = downsample_mask & mask
     mask_mat = (mask.unsqueeze(-1) & downsample_mask.unsqueeze(-2)) #[n, k, k]
     xyz_min = xyz.min(0)[0]
@@ -48,12 +53,18 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     # batch: long [N]
     # size: float [3, ]
     # start: float [3, ] / None
+    print(batch)
     call_time = str(time.time())
     base_address = "/home/ubuntu/Research/Stratified-Transformer/npy_files/"
     cluster = voxel_grid(pos, batch, size, start=start) #[N, ]
+    np.save(base_address+call_time+"_batch.npy", batch.cpu().numpy())
+    np.save(base_address+call_time+"_pos.npy", pos.cpu().numpy())
     np.save(base_address+call_time+"_cluster_first.npy", cluster.cpu().numpy())
+    
     print("------------------------------------------------------")
-    print(base_address+call_time+"_cluster_first.npy")
+    #print(base_address+call_time+"_cluster_first.npy")
+    print(size)
+    print(start)
     print("------------------------------------------------------")
     
 
@@ -68,14 +79,14 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     n = unique.shape[0]
     k = counts.max().item()
     p2v_map = cluster.new_zeros(n, k) #[n, k]
-    mask = torch.arange(k).cuda().unsqueeze(0) < counts.unsqueeze(-1) #[n, k]
+    mask = torch.arange(k).unsqueeze(0) < counts.unsqueeze(-1) #[n, k]
     p2v_map[mask] = torch.argsort(cluster)
     np.save(base_address + call_time+"_p2v_map.npy", p2v_map.cpu().numpy())
     np.save(base_address + call_time+"cluster_second.npy", cluster.cpu().numpy())
     np.save(base_address + call_time+"unique.npy", unique.cpu().numpy())
     np.save(base_address + call_time+"mask.npy", mask.cpu().numpy())
 
-
+    print(p2v_map.shape)
     return cluster, p2v_map, counts
 
 class Mlp(nn.Module):
@@ -113,7 +124,9 @@ class TransitionDown(nn.Module):
         for i in range(1, offset.shape[0]):
             count += ((offset[i].item() - offset[i-1].item())*self.ratio) + 1
             n_offset.append(count)
-        n_offset = torch.cuda.IntTensor(n_offset)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        n_offset = torch.IntTensor(n_offset).to(device)  # Moves tensor to the appropriate device
+        #n_offset = torch.cuda.IntTensor(n_offset)
         idx = pointops.furthestsampling(xyz, offset, n_offset)  # (m)
         n_xyz = xyz[idx.long(), :]  # (m, 3)
 
@@ -287,7 +300,7 @@ class BasicLayer(nn.Module):
         
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
-        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long().cuda()
+        batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
 
         v2p_map, p2v_map, counts = grid_sample(xyz, batch, window_size, start=None)
 
@@ -299,8 +312,10 @@ class BasicLayer(nn.Module):
         for i in range(1, offset.shape[0]):
             count += (offset[i].item() - offset[i-1].item()) // downsample_scale + 1
             new_offset.append(count)
-            
-        new_offset = torch.cuda.IntTensor(new_offset)
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        new_offset = torch.IntTensor(new_offset).to(device)    
+        #new_offset = torch.cuda.IntTensor(new_offset)
         downsample_idx = pointops.furthestsampling(xyz, offset.int(), new_offset.int()) #[N/16,]
 
         new_window_size = 2 * torch.tensor([self.window_size]*3).type_as(xyz).to(xyz.device)
@@ -330,7 +345,10 @@ class BasicLayer(nn.Module):
             index_0_counts = index_0.bincount()
             n_max = index_0_counts.max()
             index_0_offsets = index_0_counts.cumsum(dim=-1) #[N]
-            index_0_offsets = torch.cat([torch.zeros(1, dtype=torch.long).cuda(), index_0_offsets], 0) #[N+1]
+            #index_0_offsets = torch.cat([torch.zeros(1, dtype=torch.long).cuda(), index_0_offsets], 0) #[N+1]
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            index_0_offsets = torch.cat([torch.zeros(1, dtype=torch.long, device=device), index_0_offsets.to(device)], 0)  # [N+1]
+            
             
             feats = blk(feats, xyz, index_0, index_1, index_0_offsets, n_max)
             

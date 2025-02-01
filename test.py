@@ -88,7 +88,7 @@ def main():
     else:
         raise Exception('architecture {} not supported yet'.format(args.arch))
     
-    model = model.cuda()
+    model = model
 
     #model = torch.nn.DataParallel(model.cuda())
     logger.info(model)
@@ -96,7 +96,7 @@ def main():
     names = [line.rstrip('\n') for line in open(args.names_path)]
     if os.path.isfile(args.model_path):
         logger.info("=> loading checkpoint '{}'".format(args.model_path))
-        checkpoint = torch.load(args.model_path)
+        checkpoint = torch.load(args.model_path, map_location=torch.device('cpu'))
         state_dict = checkpoint['state_dict']
         new_state_dict = collections.OrderedDict()
         for k, v in state_dict.items():
@@ -202,7 +202,7 @@ def test(model, criterion, names, test_transform_set):
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
     target_meter = AverageMeter()
-    args.batch_size_test = 5 
+    args.batch_size_test = 5
     # args.voxel_max = None
     model.eval()
 
@@ -228,7 +228,7 @@ def test(model, criterion, names, test_transform_set):
                     pred, label = np.load(pred_save_path), np.load(label_save_path)
                 else:
                     coord, feat, label, idx_data = data_load(item, test_transform)
-                    pred = torch.zeros((label.size, args.classes)).cuda()
+                    pred = torch.zeros((label.size, args.classes))
                     idx_size = len(idx_data)
                     idx_list, coord_list, feat_list, offset_list  = [], [], [], []
                     for i in range(idx_size):
@@ -257,19 +257,19 @@ def test(model, criterion, names, test_transform_set):
                         s_i, e_i = i * args.batch_size_test, min((i + 1) * args.batch_size_test, len(idx_list))
                         idx_part, coord_part, feat_part, offset_part = idx_list[s_i:e_i], coord_list[s_i:e_i], feat_list[s_i:e_i], offset_list[s_i:e_i]
                         idx_part = np.concatenate(idx_part)
-                        coord_part = torch.FloatTensor(np.concatenate(coord_part)).cuda(non_blocking=True)
-                        feat_part = torch.FloatTensor(np.concatenate(feat_part)).cuda(non_blocking=True)
-                        offset_part = torch.IntTensor(np.cumsum(offset_part)).cuda(non_blocking=True)
+                        coord_part = torch.FloatTensor(np.concatenate(coord_part))
+                        feat_part = torch.FloatTensor(np.concatenate(feat_part))
+                        offset_part = torch.IntTensor(np.cumsum(offset_part))
                         with torch.no_grad():
                             
                             offset_ = offset_part.clone()
                             offset_[1:] = offset_[1:] - offset_[:-1]
-                            batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long().cuda(non_blocking=True)
+                            batch = torch.cat([torch.tensor([ii]*o) for ii,o in enumerate(offset_)], 0).long()
 
                             sigma = 1.0
                             radius = 2.5 * args.grid_size * sigma
                             neighbor_idx = tp.ball_query(radius, args.max_num_neighbors, coord_part, coord_part, mode="partial_dense", batch_x=batch, batch_y=batch)[0]
-                            neighbor_idx = neighbor_idx.cuda(non_blocking=True)
+                            neighbor_idx = neighbor_idx
 
                             if args.concat_xyz:
                                 feat_part = torch.cat([feat_part, coord_part], 1)
