@@ -202,7 +202,7 @@ def test(model, criterion, names, test_transform_set):
     intersection_meter = AverageMeter()
     union_meter = AverageMeter()
     target_meter = AverageMeter()
-    args.batch_size_test = 5
+    args.batch_size_test = 1
     # args.voxel_max = None
     model.eval()
 

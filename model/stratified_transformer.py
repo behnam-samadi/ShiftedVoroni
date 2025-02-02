@@ -86,7 +86,7 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     np.save(base_address + call_time+"unique.npy", unique.cpu().numpy())
     np.save(base_address + call_time+"mask.npy", mask.cpu().numpy())
 
-    print(p2v_map.shape)
+    print(p2v_map.shape, str(call_time))
     return cluster, p2v_map, counts
 
 class Mlp(nn.Module):
