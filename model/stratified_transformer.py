@@ -8,6 +8,7 @@ from torch_geometric.nn import voxel_grid
 from lib.pointops2.functions import pointops
 import time
 import numpy as np
+from shifted_voronoi_utils import *
 
 def get_indice_pairs(p2v_map, counts, new_p2v_map, new_counts, downsample_idx, batch, xyz, window_size, i):
     # p2v_map: [n, k]
@@ -53,22 +54,10 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     # batch: long [N]
     # size: float [3, ]
     # start: float [3, ] / None
-    print(batch)
     call_time = str(time.time())
     base_address = "/home/ubuntu/Research/Stratified-Transformer/npy_files/"
     cluster = voxel_grid(pos, batch, size, start=start) #[N, ]
-    np.save(base_address+call_time+"_batch.npy", batch.cpu().numpy())
-    np.save(base_address+call_time+"_pos.npy", pos.cpu().numpy())
-    np.save(base_address+call_time+"_cluster_first.npy", cluster.cpu().numpy())
     
-    print("------------------------------------------------------")
-    #print(base_address+call_time+"_cluster_first.npy")
-    print(size)
-    print(start)
-    print("------------------------------------------------------")
-    
-
-
     if return_p2v == False:
         unique, cluster = torch.unique(cluster, sorted=True, return_inverse=True)
         return cluster
@@ -81,12 +70,21 @@ def grid_sample(pos, batch, size, start, return_p2v=True):
     p2v_map = cluster.new_zeros(n, k) #[n, k]
     mask = torch.arange(k).unsqueeze(0) < counts.unsqueeze(-1) #[n, k]
     p2v_map[mask] = torch.argsort(cluster)
-    np.save(base_address + call_time+"_p2v_map.npy", p2v_map.cpu().numpy())
-    np.save(base_address + call_time+"cluster_second.npy", cluster.cpu().numpy())
-    np.save(base_address + call_time+"unique.npy", unique.cpu().numpy())
-    np.save(base_address + call_time+"mask.npy", mask.cpu().numpy())
 
-    print(p2v_map.shape)
+
+    num_centroids = p2v_map.shape[0]
+    two_stage_fps = farthest_point_sample(pos, num_centroids)
+    two_stage_fps = two_stage_fps[0, :]
+    fps1 = two_stage_fps[0:int(num_centroids / 2)]
+    fps2 = two_stage_fps[int(num_centroids / 2):]
+    pos1 = pos[fps1]
+    proposed_p2v_map, proposed_v2p_map = two_frame_knn(pos, pos1)
+    print("done")
+    
+    unique, cluster, counts = torch.unique(cluster, sorted=True, return_inverse=True, return_counts=True)
+
+
+    
     return cluster, p2v_map, counts
 
 class Mlp(nn.Module):
@@ -296,7 +294,7 @@ class BasicLayer(nn.Module):
         # xyz: N, 3
         
         window_size = torch.tensor([self.window_size]*3).type_as(xyz).to(xyz.device)
-        print("/////window size calculated: ", window_size, " from ", self.window_size)
+        #print("/////window size calculated: ", window_size, " from ", self.window_size)
         
         offset_ = offset.clone()
         offset_[1:] = offset_[1:] - offset_[:-1]
@@ -319,7 +317,7 @@ class BasicLayer(nn.Module):
         downsample_idx = pointops.furthestsampling(xyz, offset.int(), new_offset.int()) #[N/16,]
 
         new_window_size = 2 * torch.tensor([self.window_size]*3).type_as(xyz).to(xyz.device)
-        print("/////new_window size calculated: ", new_window_size, " from ", self.window_size)
+        #print("/////new_window size calculated: ", new_window_size, " from ", self.window_size)
         
         # offset_ = new_offset.clone()
         # offset_[1:] = offset_[1:] - offset_[:-1]
